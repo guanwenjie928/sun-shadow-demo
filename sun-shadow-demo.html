@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>太阳与影子实验 — 知雀</title>
+
+  <!-- Three.js import map：用于在浏览器中动态生成 GLB 模型 -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <!-- Google Model Viewer：核心 3D 查看器 -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      color: #e0e0e0;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 920px;
+      background: rgba(20, 20, 40, 0.85);
+      border-radius: 24px;
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+
+    .header {
+      padding: 24px 28px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #f9d423, #ff9350);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header .badge {
+      font-size: 0.75rem;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(255, 147, 80, 0.2);
+      color: #ff9350;
+      border: 1px solid rgba(255, 147, 80, 0.3);
+    }
+
+    /* ── model-viewer 区域 ── */
+    .viewer-wrapper {
+      position: relative;
+      margin: 16px 20px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: radial-gradient(ellipse at center, #1a3a5c 0%, #0a0a1a 100%);
+      aspect-ratio: 16 / 10;
+      min-height: 400px;
+    }
+
+    model-viewer {
+      width: 100%;
+      height: 100%;
+      --poster-color: transparent;
+      --progress-bar-color: #ff9350;
+      --progress-mask: transparent;
+    }
+
+    /* 太阳位置指示器 */
+    .sun-indicator {
+      position: absolute;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fffde0 5%, #ffe680 25%, #ff8c00 55%, transparent 70%);
+      box-shadow: 0 0 50px #ff8c00, 0 0 150px rgba(255, 140, 0, 0.5);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+      transition: opacity 0.3s;
+    }
+
+    /* 环境贴图预览小窗 */
+    .env-preview {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      width: 100px;
+      height: 50px;
+      border-radius: 6px;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      opacity: 0.7;
+      z-index: 3;
+      pointer-events: none;
+      background: #000;
+      object-fit: cover;
+    }
+
+    /* ── 控制面板 ── */
+    .controls {
+      padding: 0 28px 28px;
+    }
+
+    .slider-group {
+      margin-bottom: 18px;
+    }
+
+    .slider-group label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+      color: #b0b0c0;
+    }
+
+    .slider-group label .value {
+      font-weight: 700;
+      color: #ff9350;
+      font-size: 1rem;
+      min-width: 60px;
+      text-align: right;
+    }
+
+    /* 自定义 range */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #2b3a5c, #4a6080, #ff9350, #f9d423, #ff9350, #4a6080, #2b3a5c);
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #ffe680, #ff8c00);
+      box-shadow: 0 0 20px rgba(255, 140, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.3);
+      border: 2px solid #fff;
+      cursor: grab;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:active {
+      cursor: grabbing;
+    }
+
+    /* ── 快捷时段按钮 ── */
+    .preset-buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .preset-buttons button {
+      flex: 1;
+      min-width: 60px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.05);
+      color: #c0c0d0;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.25s;
+      backdrop-filter: blur(10px);
+      font-family: inherit;
+    }
+
+    .preset-buttons button:hover {
+      background: rgba(255, 147, 80, 0.15);
+      border-color: rgba(255, 147, 80, 0.4);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    .preset-buttons button.active {
+      background: rgba(255, 147, 80, 0.25);
+      border-color: #ff9350;
+      color: #ff9350;
+      box-shadow: 0 0 20px rgba(255, 147, 80, 0.2);
+    }
+
+    /* ── 信息卡片 ── */
+    .info-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .info-card {
+      flex: 1;
+      min-width: 100px;
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .info-card .card-label {
+      font-size: 0.75rem;
+      color: #808090;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-card .card-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #e8e8f0;
+    }
+
+    .model-viewer-hint {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #606080;
+      padding: 0 28px 16px;
+    }
+
+    .model-viewer-hint span {
+      color: #8080a0;
+    }
+
+    /* 响应式 */
+    @media (max-width: 600px) {
+      .header h1 { font-size: 1.2rem; }
+      .viewer-wrapper {
+        aspect-ratio: 4/3;
+        min-height: 280px;
+        margin: 12px;
+      }
+      .controls { padding: 0 12px 20px; }
+      .preset-buttons button { padding: 8px 10px; font-size: 0.78rem; }
+      .info-card { padding: 10px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 头部 -->
+    <div class="header">
+      <h1>太阳与影子 · 实验台</h1>
+      <span class="badge">model-viewer IBL</span>
+    </div>
+
+    <!-- 3D 查看器 -->
+    <div class="viewer-wrapper" id="viewerWrapper">
+      <div class="sun-indicator" id="sunIndicator"></div>
+      <img class="env-preview" id="envPreview" alt="环境贴图预览" />
+      <model-viewer
+        id="viewer"
+        camera-controls
+        touch-action="pan-y"
+        camera-orbit="45deg 65deg 6m"
+        min-camera-orbit="auto auto 2m"
+        max-camera-orbit="auto auto 20m"
+        interpolation-decay="200"
+        shadow-intensity="0.85"
+        shadow-softness="0.55"
+        exposure="0.9"
+        environment-image="neutral"
+      ></model-viewer>
+    </div>
+
+    <!-- 操作提示 -->
+    <div class="model-viewer-hint">
+      拖拽旋转 &nbsp;·&nbsp; 滚轮缩放 &nbsp;·&nbsp; 右键平移 &nbsp;|&nbsp;
+      <span>下方滑块控制太阳，拖动看影子实时变化</span>
+    </div>
+
+    <!-- 控制面板 -->
+    <div class="controls">
+      <!-- 太阳高度角 -->
+      <div class="slider-group">
+        <label>
+          太阳高度角 <span style="font-size:0.8rem;color:#707090;">0°=地平线 &nbsp; 90°=正头顶</span>
+          <span class="value" id="angleDisplay">45°</span>
+        </label>
+        <input type="range" id="sunAngle" min="1" max="89" value="45" step="0.5">
+      </div>
+
+      <!-- 太阳方位角 -->
+      <div class="slider-group">
+        <label>
+          太阳方位角 <span style="font-size:0.8rem;color:#707090;">0°=北 &nbsp; 90°=东 &nbsp; 180°=南 &nbsp; 270°=西</span>
+          <span class="value" id="azimuthDisplay">180°</span>
+        </label>
+        <input type="range" id="sunAzimuth" min="0" max="360" value="180" step="1">
+      </div>
+
+      <!-- 快捷时段 -->
+      <div class="preset-buttons" id="presetButtons">
+        <button data-elevation="5"  data-azimuth="90">日出 5°</button>
+        <button data-elevation="30" data-azimuth="135">上午 30°</button>
+        <button data-elevation="78" data-azimuth="180">正午 78°</button>
+        <button data-elevation="30" data-azimuth="225">下午 30°</button>
+        <button data-elevation="5"  data-azimuth="270">日落 5°</button>
+      </div>
+
+      <!-- 实时数据 -->
+      <div class="info-row">
+        <div class="info-card">
+          <div class="card-label">影子长度倍率</div>
+          <div class="card-value" id="shadowRatio">1.0x</div>
+        </div>
+        <div class="info-card">
+          <div class="card-label">影子投射方向</div>
+          <div class="card-value" id="shadowDirection">↓ 北</div>
+        </div>
+        <div class="info-card">
+          <div class="card-label">地表光照强度</div>
+          <div class="card-value" id="lightIntensity">70%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // ═══════════════════════════════════════════════
+    // 第一步：用 Three.js 动态生成实验场景的 GLB 模型
+    // 包含地面、柱子、球体、方块等，全部预配置好 castShadow / receiveShadow
+    // ═══════════════════════════════════════════════
+    async function generateSceneGLB() {
+      const scene = new THREE.Scene();
+
+      // ── 材质 ──
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: 0xd4b896, roughness: 0.85, metalness: 0.05,
+      });
+      const poleMat = new THREE.MeshStandardMaterial({
+        color: 0xb0ada6, roughness: 0.4, metalness: 0.1,
+      });
+      const sphereMat = new THREE.MeshStandardMaterial({
+        color: 0xe88741, roughness: 0.3, metalness: 0.2,
+      });
+      const blockMat = new THREE.MeshStandardMaterial({
+        color: 0x8db5c7, roughness: 0.5, metalness: 0.1,
+      });
+      const coneMat = new THREE.MeshStandardMaterial({
+        color: 0xcf6f4a, roughness: 0.4, metalness: 0.15,
+      });
+
+      // ── 地面（接收影子）──
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = 0;
+      ground.receiveShadow = true;
+      ground.name = '地面';
+      scene.add(ground);
+
+      // ── 地面网格（帮助辨识影子方向）──
+      const gridHelper = new THREE.PolarGridHelper(3.5, 32, 20, 64, 0x555555, 0x444444);
+      gridHelper.position.y = 0.005;
+      gridHelper.name = '网格';
+      scene.add(gridHelper);
+
+      // ── 主柱子（旗杆，投射清晰影子）──
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.15, 2.5, 32), poleMat
+      );
+      pole.position.set(0, 1.25, 0);
+      pole.castShadow = true;
+      pole.receiveShadow = true;
+      pole.name = '柱子';
+      scene.add(pole);
+
+      // ── 柱顶小球 ──
+      const topBall = new THREE.Mesh(
+        new THREE.SphereGeometry(0.18, 32, 32), sphereMat
+      );
+      topBall.position.set(0, 2.6, 0);
+      topBall.castShadow = true;
+      topBall.name = '柱顶球';
+      scene.add(topBall);
+
+      // ── 侧边球体 ──
+      const sideSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 32, 32), sphereMat
+      );
+      sideSphere.position.set(1.2, 0.35, 0.6);
+      sideSphere.castShadow = true;
+      sideSphere.receiveShadow = true;
+      sideSphere.name = '球体';
+      scene.add(sideSphere);
+
+      // ── 方块建筑 ──
+      const block = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 0.9, 0.7), blockMat
+      );
+      block.position.set(-1.0, 0.45, -0.4);
+      block.castShadow = true;
+      block.receiveShadow = true;
+      block.name = '建筑';
+      scene.add(block);
+
+      // ── 小圆锥 ──
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.22, 0.55, 32), coneMat
+      );
+      cone.position.set(0.8, 0.275, -0.8);
+      cone.castShadow = true;
+      cone.receiveShadow = true;
+      cone.name = '锥体';
+      scene.add(cone);
+
+      // ── 南向标记箭头（帮助理解方位）──
+      const arrowShape = new THREE.Shape();
+      arrowShape.moveTo(0, 0.25);
+      arrowShape.lineTo(0.5, 0);
+      arrowShape.lineTo(0, -0.25);
+      const arrowGeo = new THREE.ExtrudeGeometry(arrowShape, { depth: 0.02, bevelEnabled: false });
+      const arrow = new THREE.Mesh(arrowGeo, new THREE.MeshStandardMaterial({
+        color: 0xff4444, roughness: 0.5, metalness: 0,
+      }));
+      arrow.position.set(0, 0.008, -3.0);
+      arrow.rotation.x = -Math.PI / 2;
+      arrow.rotation.z = Math.PI; // 箭头指向 -Z（南）
+      arrow.receiveShadow = true;
+      arrow.name = '南向标记';
+      scene.add(arrow);
+
+      // ── 导出 GLB ──
+      const exporter = new GLTFExporter();
+      const glbArrayBuffer = await new Promise((resolve, reject) => {
+        exporter.parse(
+          scene,
+          (result) => resolve(result),
+          (err) => reject(err),
+          { binary: true }
+        );
+      });
+
+      return new Blob([glbArrayBuffer], { type: 'model/gltf-binary' });
+    }
+
+    // ═══════════════════════════════════════════════
+    // 第二步：动态环境贴图引擎
+    // 在 Canvas 上绘制 equirectangular 天空，太阳亮点位置决定 IBL 光照方向
+    // model-viewer 会根据贴图中的亮斑方向自动推导阴影方向
+    // ═══════════════════════════════════════════════
+    const ENV_SIZE = 512; // 512×256 的 equirectangular 环境贴图
+
+    function generateEnvMap(elevationDeg, azimuthDeg) {
+      const w = ENV_SIZE;
+      const h = ENV_SIZE / 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+
+      const elev = Math.max(elevationDeg, 0.5);
+      const elevFactor = elev / 90; // 0=地平线, 1=正上方
+
+      // ── 1. 天空渐变 ──
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+
+      // 天顶颜色：高太阳=亮蓝，低太阳=深蓝
+      const zenithR = Math.round(60 + elevFactor * 70);
+      const zenithG = Math.round(120 + elevFactor * 90);
+      const zenithB = Math.round(180 + elevFactor * 60);
+      skyGrad.addColorStop(0, `rgb(${zenithR},${zenithG},${zenithB})`);
+
+      // 中天颜色
+      const midR = Math.round(100 + (1 - elevFactor) * 80);
+      const midG = Math.round(130 + (1 - elevFactor) * 40);
+      const midB = Math.round(160 + (1 - elevFactor) * 10);
+      skyGrad.addColorStop(0.45, `rgb(${midR},${midG},${midB})`);
+
+      // 地平线颜色：低太阳=暖橙，高太阳=淡蓝白
+      const horizonWarmth = elev < 15 ? 1 : Math.max(0, 1 - elevFactor);
+      const horR = Math.round(135 + horizonWarmth * 120);
+      const horG = Math.round(130 + horizonWarmth * 60 - elevFactor * 30);
+      const horB = Math.round(100 + horizonWarmth * 20 - elevFactor * 30);
+      skyGrad.addColorStop(0.5, `rgb(${horR},${horG},${horB})`);
+
+      // 地面颜色（下半部分）
+      const gndR = Math.round(50 + elevFactor * 25);
+      const gndG = Math.round(35 + elevFactor * 15);
+      const gndB = Math.round(20 + elevFactor * 10);
+      skyGrad.addColorStop(0.55, `rgb(${gndR},${gndG},${gndB})`);
+      skyGrad.addColorStop(1, `rgb(${Math.round(gndR*0.6)},${Math.round(gndG*0.6)},${Math.round(gndB*0.6)})`);
+
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // ── 2. 太阳光斑（equirectangular 投影）──
+      // azimuth: 0=前(+Z), 90=右(+X), 180=后(-Z), 270=左(-X)
+      // elevation: 0=地平线, 90=天顶
+      // equirectangular: x = azimuth/360*w, y = (90-elevation)/180*h
+      const sunX = ((azimuthDeg % 360) / 360) * w;
+      const sunY = ((90 - elev) / 180) * h;
+
+      // 太阳光斑大小与颜色
+      const sunRadius = 35 + (1 - elevFactor) * 40; // 低角度太阳看起来更大
+      const glowRadius = sunRadius * 3.5;
+
+      const sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, glowRadius);
+
+      // 核心纯白
+      sunGlow.addColorStop(0, 'rgba(255,255,255,1)');
+      // 内光晕：暖色程度随高度变化
+      const innerWarmth = elev < 20 ? 0.6 : 0.1;
+      sunGlow.addColorStop(0.08, `rgba(255,${240-Math.round(innerWarmth*60)},${210-Math.round(innerWarmth*160)},0.98)`);
+      // 中光晕
+      sunGlow.addColorStop(0.25, `rgba(255,${210-Math.round(innerWarmth*80)},${150-Math.round(innerWarmth*130)},0.7)`);
+      // 外光晕
+      sunGlow.addColorStop(0.5, `rgba(255,${170-Math.round(innerWarmth*60)},${80-Math.round(innerWarmth*70)},0.3)`);
+      // 最外层淡化
+      sunGlow.addColorStop(0.75, 'rgba(255,180,100,0.08)');
+      sunGlow.addColorStop(1, 'rgba(255,180,100,0)');
+
+      ctx.fillStyle = sunGlow;
+      ctx.fillRect(0, 0, w, h);
+
+      // ── 3. 地平线附近暖光散射（低角度时）──
+      if (elev < 25) {
+        const scatterIntensity = (1 - elev / 25) * 0.5;
+        const scatterGlow = ctx.createRadialGradient(sunX, h * 0.5, 0, sunX, h * 0.5, w * 0.7);
+        scatterGlow.addColorStop(0, `rgba(255,160,80,${scatterIntensity})`);
+        scatterGlow.addColorStop(0.5, `rgba(255,120,60,${scatterIntensity * 0.3})`);
+        scatterGlow.addColorStop(1, 'rgba(255,100,50,0)');
+        ctx.fillStyle = scatterGlow;
+        ctx.fillRect(0, 0, w, h);
+      }
+
+      return canvas;
+    }
+
+    // ═══════════════════════════════════════════════
+    // 第三步：模型加载、环境贴图注入、交互相应
+    // ═══════════════════════════════════════════════
+    const viewer = document.getElementById('viewer');
+    const sunIndicator = document.getElementById('sunIndicator');
+    const viewerWrapper = document.getElementById('viewerWrapper');
+    const envPreview = document.getElementById('envPreview');
+    const sunAngleInput = document.getElementById('sunAngle');
+    const sunAzimuthInput = document.getElementById('sunAzimuth');
+    const angleDisplay = document.getElementById('angleDisplay');
+    const azimuthDisplay = document.getElementById('azimuthDisplay');
+    const shadowRatioEl = document.getElementById('shadowRatio');
+    const shadowDirectionEl = document.getElementById('shadowDirection');
+    const lightIntensityEl = document.getElementById('lightIntensity');
+    const presetButtons = document.getElementById('presetButtons');
+
+    let currentElevation = 45;
+    let currentAzimuth = 180;
+    let envMapUpdateScheduled = false;
+
+    // ── 加载 GLB 模型到 model-viewer ──
+    const glbBlob = await generateSceneGLB();
+    const objectURL = URL.createObjectURL(glbBlob);
+    viewer.src = objectURL;
+
+    // ── 应用环境贴图到 model-viewer ──
+    function applyEnvironmentMap() {
+      if (envMapUpdateScheduled) return;
+      envMapUpdateScheduled = true;
+
+      requestAnimationFrame(() => {
+        const envCanvas = generateEnvMap(currentElevation, currentAzimuth);
+        const dataURL = envCanvas.toDataURL('image/png');
+
+        // ★ 核心：将动态生成的环境贴图注入 model-viewer
+        // model-viewer 会基于贴图中的太阳亮斑方向自动计算光照与阴影
+        viewer.environmentImage = dataURL;
+
+        // 随太阳高度调整曝光度与阴影柔和度
+        viewer.exposure = 0.35 + (currentElevation / 90) * 1.0;
+        viewer.shadowSoftness = 0.25 + (1 - currentElevation / 90) * 0.65;
+
+        // 更新右下角预览小窗
+        envPreview.src = dataURL;
+
+        envMapUpdateScheduled = false;
+      });
+    }
+
+    // ── model-viewer 场景加载完成 ──
+    viewer.addEventListener('load', () => {
+      console.log('✅ model-viewer 场景就绪，启动动态 IBL 光照...');
+      applyEnvironmentMap();
+      updateSunIndicator(currentElevation, currentAzimuth);
+      updateInfoPanel(currentElevation, currentAzimuth);
+    });
+
+    // ── 统一更新入口 ──
+    function sunDidChange(elevationDeg, azimuthDeg) {
+      currentElevation = elevationDeg;
+      currentAzimuth = azimuthDeg;
+      applyEnvironmentMap();
+      updateSunIndicator(elevationDeg, azimuthDeg);
+      updateInfoPanel(elevationDeg, azimuthDeg);
+    }
+
+    // ── 太阳指示器（覆盖在 model-viewer 上的 CSS 光点）──
+    function updateSunIndicator(elevationDeg, azimuthDeg) {
+      const rect = viewerWrapper.getBoundingClientRect();
+
+      // 将球面坐标映射到面板上的 2D 位置
+      const nx = ((azimuthDeg + 180) % 360) / 360; // 归一化 x
+      const ny = 1 - (elevationDeg / 90);           // 归一化 y（0=顶部/天顶）
+
+      const x = nx * rect.width;
+      const y = ny * rect.height * 0.8 + rect.height * 0.1;
+
+      sunIndicator.style.left = x + 'px';
+      sunIndicator.style.top = y + 'px';
+      sunIndicator.style.opacity = elevationDeg < 3 ? 0.25 : elevationDeg < 8 ? 0.55 : 1;
+    }
+
+    // ── 信息面板更新 ──
+    function updateInfoPanel(elevationDeg, azimuthDeg) {
+      // 影子长度倍率 = cot(仰角)
+      const elevRad = THREE.MathUtils.degToRad(Math.max(elevationDeg, 0.5));
+      const ratio = 1 / Math.tan(elevRad);
+      shadowRatioEl.textContent = ratio.toFixed(1) + 'x';
+
+      // 影子方向 = 太阳对面
+      const shadowAz = (azimuthDeg + 180) % 360;
+      const dirs = [
+        { r: [337.5, 360], l: '↑ 北' }, { r: [0, 22.5], l: '↑ 北' },
+        { r: [22.5, 67.5], l: '↗ 东北' }, { r: [67.5, 112.5], l: '→ 东' },
+        { r: [112.5, 157.5], l: '↘ 东南' }, { r: [157.5, 202.5], l: '↓ 南' },
+        { r: [202.5, 247.5], l: '↙ 西南' }, { r: [247.5, 292.5], l: '← 西' },
+        { r: [292.5, 337.5], l: '↖ 西北' },
+      ];
+      const hit = dirs.find(d =>
+        (d.r[0] <= shadowAz && shadowAz < d.r[1]) ||
+        (d.r[0] > d.r[1] && (shadowAz >= d.r[0] || shadowAz < d.r[1]))
+      );
+      shadowDirectionEl.textContent = hit ? hit.l : '?';
+
+      // 光照强度
+      const pct = Math.round(25 + (elevationDeg / 90) * 75);
+      lightIntensityEl.textContent = pct + '%';
+    }
+
+    // ── 事件：高度角滑块 ──
+    sunAngleInput.addEventListener('input', () => {
+      const val = parseFloat(sunAngleInput.value);
+      angleDisplay.textContent = val + '°';
+      sunDidChange(val, currentAzimuth);
+      updatePresetActive();
+    });
+
+    // ── 事件：方位角滑块 ──
+    sunAzimuthInput.addEventListener('input', () => {
+      const val = parseFloat(sunAzimuthInput.value);
+      azimuthDisplay.textContent = val + '°';
+      sunDidChange(currentElevation, val);
+      updatePresetActive();
+    });
+
+    // ── 事件：快捷时段按钮 ──
+    presetButtons.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+
+      const elevation = parseFloat(btn.dataset.elevation);
+      const azimuth = parseFloat(btn.dataset.azimuth);
+
+      sunAngleInput.value = elevation;
+      sunAzimuthInput.value = azimuth;
+      angleDisplay.textContent = elevation + '°';
+      azimuthDisplay.textContent = azimuth + '°';
+      sunDidChange(elevation, azimuth);
+      updatePresetActive();
+    });
+
+    function updatePresetActive() {
+      presetButtons.querySelectorAll('button').forEach(btn => {
+        const e = parseFloat(btn.dataset.elevation);
+        const a = parseFloat(btn.dataset.azimuth);
+        btn.classList.toggle('active',
+          Math.abs(e - currentElevation) < 0.6 && Math.abs(a - currentAzimuth) < 0.6
+        );
+      });
+    }
+
+    // ── 窗口调整 ──
+    window.addEventListener('resize', () => {
+      updateSunIndicator(currentElevation, currentAzimuth);
+    });
+
+    // ── 初始状态 ──
+    updateSunIndicator(currentElevation, currentAzimuth);
+    updateInfoPanel(currentElevation, currentAzimuth);
+    updatePresetActive();
+
+    // ── 清理 ──
+    window.addEventListener('beforeunload', () => {
+      URL.revokeObjectURL(objectURL);
+    });
+
+    console.log('🐦 知雀：太阳与影子实验台已就绪！');
+    console.log('   原理：动态生成 equirectangular 环境贴图 → 注入 model-viewer IBL 系统');
+    console.log('   太阳亮斑在贴图中的位置决定光照方向，model-viewer 原生推导阴影');
+    console.log('   拖动滑块或点击快捷按钮，观察 3D 场景中影子的方向与长度变化');
+  </script>
+</body>
+</html>
